@@ -40,7 +40,7 @@ class GeneratorGaussians8(object):
                 point[1] += center[1]
                 dataset.append(point)
             dataset = np.array(dataset, dtype='float32')
-            dataset /= self.stdev  # stdev
+            dataset /= self.stdev
             yield dataset
 
 
@@ -91,4 +91,3 @@ class GeneratorSwissRoll(object):
             data = data.astype('float32')[:, [0, 2]]
             data /= self.stdev  # stdev plus a little
             yield data
-

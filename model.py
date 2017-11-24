@@ -27,10 +27,11 @@ class Model(object):
         self.activation_fn = activation_fn
         self.reuse = reuse
         self.output_tensor = None
+        self.var_list = None
         self.define_model()
 
     def define_model(self):
-        with tf.variable_scope(self.variable_scope_name, reuse=self.reuse):
+        with tf.variable_scope(self.variable_scope_name, reuse=self.reuse) as self.var_list:
             x = self.input
             with slim.variable_scope([slim.fully_connected],
                                      num_outputs=self.n_hidden_neurons,
