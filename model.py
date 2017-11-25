@@ -31,16 +31,18 @@ class Model(object):
         self.define_model()
 
     def define_model(self):
-        with tf.variable_scope(self.variable_scope_name, reuse=self.reuse) as self.var_list:
+        with tf.variable_scope(self.variable_scope_name, reuse=self.reuse) as vs:
             x = self.input
-            with slim.variable_scope([slim.fully_connected],
-                                     num_outputs=self.n_hidden_neurons,
-                                     activation_fn=self.activation_fn):
+            with slim.arg_scope([slim.fully_connected],
+                                num_outputs=self.n_hidden_neurons,
+                                activation_fn=self.activation_fn):
                 for i in range(self.n_hidden_layers):
                     x = slim.fully_connected(inputs=x)
             self.output_tensor = slim.fully_connected(inputs=x,
                                                       num_outputs=self.n_out_dim,
                                                       activation_fn=None)
+
+            self.var_list = tf.contrib.framework.get_variables(vs)
 
 
 class Generator(Model):
