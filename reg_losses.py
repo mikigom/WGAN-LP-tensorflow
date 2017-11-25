@@ -24,7 +24,7 @@ def get_perbatuation_samples(training_samples, generated_samples, per_type,
             minval=0.,
             maxval=1.
         )
-        _, batch_std = tf.nn.moments(tf.reshape(training_samples, [-1]), axis=[0])
+        _, batch_std = tf.nn.moments(tf.reshape(training_samples, [-1]), axes=[0])
 
         delta = dragan_parameter_C * batch_std * u
 
@@ -44,7 +44,7 @@ def get_perbatuation_samples(training_samples, generated_samples, per_type,
             minval=0.,
             maxval=1.
         )
-        _, batch_std = tf.nn.moments(tf.reshape(samples, [-1]), axis=[0])
+        _, batch_std = tf.nn.moments(tf.reshape(samples, [-1]), axes=[0])
 
         delta = dragan_parameter_C * batch_std * u
 
@@ -87,4 +87,4 @@ def get_regularization_term(training_samples, generated_samples,
     else:
         NotImplementedError('arg reg_type is not injected correctly.')
 
-    return gradient_penalty
+    return gradient_penalty, x_hat

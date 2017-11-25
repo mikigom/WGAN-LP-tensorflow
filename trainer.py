@@ -1,13 +1,16 @@
-import sys
-
 import os
+
 import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
 
 import data_generator
 from model import Generator, Critic
 from reg_losses import get_regularization_term
 
 slim = tf.contrib.slim
+
+__eval_step_list__ = [10, 50, 100, 500, 1000, 2500, 5000]
 
 flags = tf.app.flags
 flags.DEFINE_integer("n_epoch", 5000, "Epoch to train [5000]")
@@ -26,9 +29,10 @@ flags.DEFINE_integer("n_c_iters_under_begining_init_step", 100, "[100]")
 flags.DEFINE_integer("n_c_iters_over_begining_init_step", 10, "[10]")
 
 flags.DEFINE_float("learning_rate", 5e-5, "Learning rate of optimizer [5e-5]")
-flags.DEFINE_float("Lambda", 5., "Weights for critics' regularization term [5]")
-flags.DEFINE_string("Regularization_type", "LP", "[no_reg_but_clipping, LP, GP]")
-flags.DEFINE_string("Purturbation_type", "no_purf", "[no_purf, wgan_gp, dragan_only_training, dragan_only_both]")
+flags.DEFINE_float("Lambda", 10., "Weights for critics' regularization term [5]")
+flags.DEFINE_string("Regularization_type", "LP", "[no_reg, no_reg_but_clipping, LP, GP]")
+flags.DEFINE_string("Purturbation_type", "dragan_only_training",
+                    "[no_purf, wgan_gp, dragan_only_training, dragan_only_both]")
 flags.DEFINE_string("dataset", 'GeneratorSwissRoll',
                     "Which dataset is used? [GeneratorGaussians8, GeneratorGaussians25, GeneratorSwissRoll]")
 
@@ -53,6 +57,7 @@ class Trainer(object):
         self.c_regularization_loss = None
         self.c_loss = None
         self.c_clipping = None
+        self.x_hat = None
 
         self.ckpt_dir = None
         self.summary_writer = None
@@ -87,7 +92,7 @@ class Trainer(object):
 
     def define_dataset(self):
         self.dataset_generator = iter(getattr(data_generator, FLAGS.dataset)(FLAGS.n_batch_size))
-        self.real_input = tf.placeholder(tf.float32, shape=(FLAGS.n_batch_size, 2))
+        self.real_input = tf.placeholder(tf.float32, shape=(None, 2))
 
     def define_latent(self):
         self.z = tf.random_normal([FLAGS.n_batch_size, FLAGS.latent_dimensionality], mean=0.0, stddev=1.0, name='z')
@@ -104,10 +109,11 @@ class Trainer(object):
     def define_loss(self):
         self.g_loss = -tf.reduce_mean(self.critic_gz.output_tensor)
         self.c_negative_loss = -self.g_loss - tf.reduce_mean(self.critic_x.output_tensor)
-        if FLAGS.Regularization_type == 'no_reg_but_clipping':
+        if FLAGS.Regularization_type == 'no_reg_but_clipping' or \
+           FLAGS.Regularization_type == 'no_reg':
             self.c_regularization_loss = 0.
         else:
-            self.c_regularization_loss = get_regularization_term(
+            self.c_regularization_loss, self.x_hat = get_regularization_term(
                                                 training_samples=self.real_input,
                                                 generated_samples=self.generator.output_tensor,
                                                 reg_type=FLAGS.Regularization_type,
@@ -137,7 +143,7 @@ class Trainer(object):
                                  FLAGS.dataset+'_',
                                  FLAGS.Regularization_type+'_',
                                  FLAGS.Purturbation_type+'_',
-                                 str(FLAGS.Lambda)+'_',
+                                 str(FLAGS.Lambda),
                                  '/'])
 
         if not os.path.exists(self.ckpt_dir):
@@ -194,13 +200,52 @@ class Trainer(object):
             self.real_input: None
         }
 
+    def draw_level_sets(self, step,
+                        x_min=-2.5, x_max=2.5,
+                        y_min=-2.5, y_max=2.5,
+                        n_batch=4):
+        x = np.linspace(x_min, x_max, 200)
+        y = np.linspace(y_min, y_max, 200)
+
+        x, y = np.meshgrid(x, y)
+        grid_pts = np.stack([x.flatten(), y.flatten()], axis=1)
+
+        z = self.sess.run(self.critic_x.output_tensor, feed_dict={self.real_input: grid_pts})
+        z = np.reshape(z, (200, 200))
+
+        plt.contour(x, y, z, 30, cmap='copper')
+
+        real = list()
+        fake = list()
+        perturbated = list()
+        for i in range(n_batch):
+            __real__ = next(self.dataset_generator)
+
+            __fake__, __perturbated__ = \
+                self.sess.run([self.generator.output_tensor, self.x_hat], feed_dict={self.real_input: __real__})
+            real.append(__real__)
+            fake.append(__fake__)
+            perturbated.append(__perturbated__)
+
+        real = np.vstack(real)
+        fake = np.vstack(fake)
+        perturbated = np.vstack(perturbated)
+
+        plt.scatter(real[:, 0], real[:, 1], c='y', s=2)
+        plt.scatter(fake[:, 0], fake[:, 1], c='g', s=2)
+        plt.scatter(perturbated[:, 0], perturbated[:, 1], c='r', s=1)
+
+        plt.savefig(self.ckpt_dir+str(step)+'.png')
+        plt.clf()
+
     def train(self):
         try:
+            c_fetch_dict = None
             print("[.] Learning Start...")
             step = 0
             while not self.coord.should_stop():
-                if step >= FLAGS.n_epoch:
-                    raise tf.errors.OutOfRangeError
+                if step > FLAGS.n_epoch:
+                    break
 
                 self.c_feed_dict[self.real_input] = next(self.dataset_generator)
                 step = self.sess.run(self.step)
@@ -214,21 +259,20 @@ class Trainer(object):
 
                 g_fetch_dict = self.sess.run(self.g_update_fetch_dict)
 
-                # TODO
+                self.summary_writer.add_summary(c_fetch_dict["summary"], c_fetch_dict["step"])
+                self.summary_writer.add_summary(g_fetch_dict["summary"], g_fetch_dict["step"])
+                self.summary_writer.flush()
+
+                if step in __eval_step_list__:
+                    self.draw_level_sets(step)
 
                 self.sess.run(self.step_inc)
 
-        except tf.errors.OutOfRangeError:
-            self.saver.save(self.sess, self.ckpt_dir)
-            print('Done training -- epoch limit reached')
-            self.coord.request_stop()
         except KeyboardInterrupt:
             print("Interrupted")
             self.coord.request_stop()
-        except Exception as e:
-            print(e)
-            print("@ line {}".format(sys.exc_info()[-1].tb_lineno))
         finally:
+            self.saver.save(self.sess, self.ckpt_dir)
             print('Stop')
             self.coord.request_stop()
             self.coord.join(self.threads)
@@ -236,4 +280,5 @@ class Trainer(object):
 
 if __name__ == '__main__':
     trainer = Trainer()
+    trainer.train()
     trainer.sess.close()
