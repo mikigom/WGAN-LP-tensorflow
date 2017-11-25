@@ -36,7 +36,7 @@ def get_perbatuation_samples(training_samples, generated_samples, per_type,
 
         x_hat = training_samples + (1 - alpha) * delta
 
-    elif per_type == 'dragan_only_both':
+    elif per_type == 'dragan_both':
         samples = tf.concat([training_samples, generated_samples], axis=0)
 
         u = tf.random_uniform(
