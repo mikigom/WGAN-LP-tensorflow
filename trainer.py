@@ -3,6 +3,8 @@ import os
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import linear_sum_assignment
+from scipy.spatial import distance
 
 import data_generator
 from model import Generator, Critic
@@ -10,10 +12,10 @@ from reg_losses import get_regularization_term
 
 slim = tf.contrib.slim
 
-__eval_step_list__ = [10, 50, 100, 500, 1000, 2500, 5000]
+__eval_step_list__ = [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 15000, 20000]
 
 flags = tf.app.flags
-flags.DEFINE_integer("n_epoch", 5000, "Epoch to train [5000]")
+flags.DEFINE_integer("n_epoch", 20000, "Epoch to train [20000]")
 flags.DEFINE_integer("n_batch_size", 256, "Batch size to train [256]")
 flags.DEFINE_integer("latent_dimensionality", 2, "Dimensionality of the latent variables [2]")
 
@@ -27,6 +29,7 @@ in order to get closer to the optimal critic in the beginning of training.
 flags.DEFINE_integer("begining_init_step", 25, "[25]")
 flags.DEFINE_integer("n_c_iters_under_begining_init_step", 100, "[100]")
 flags.DEFINE_integer("n_c_iters_over_begining_init_step", 10, "[10]")
+flags.DEFINE_integer("interval_record_earth_mover", 10, "[10]")
 
 flags.DEFINE_float("learning_rate", 5e-5, "Learning rate of optimizer [5e-5]")
 flags.DEFINE_float("Lambda", 5., "Weights for critics' regularization term [5]")
@@ -38,6 +41,8 @@ flags.DEFINE_string("dataset", 'GeneratorSwissRoll',
 
 flags.DEFINE_string("critic_variable_scope_name", "Critic", "[Critic]")
 flags.DEFINE_string("generator_variable_scope_name", "Generator", "Generator")
+
+flags.DEFINE_bool("emd_records", False, "Whether EMD is recorded. (It takes some time...)[True, False]")
 FLAGS = flags.FLAGS
 
 
@@ -63,6 +68,8 @@ class Trainer(object):
         self.summary_writer = None
         self.c_summary_op = None
         self.g_summary_op = None
+        self.emd_placeholder = None
+        self.emd_summary = None
 
         self.saver = None
 
@@ -160,6 +167,9 @@ class Trainer(object):
             tf.summary.scalar('loss/g', self.g_loss)
         ])
 
+        self.emd_placeholder = tf.placeholder(tf.float32, shape=())
+        self.emd_summary = tf.summary.scalar('EMD', self.emd_placeholder)
+
     def define_saver(self):
         self.saver = tf.train.Saver()
 
@@ -203,7 +213,7 @@ class Trainer(object):
     def draw_level_sets(self, step,
                         x_min=-2.5, x_max=2.5,
                         y_min=-2.5, y_max=2.5,
-                        n_batch=4):
+                        n_batch=2):
         x = np.linspace(x_min, x_max, 200)
         y = np.linspace(y_min, y_max, 200)
 
@@ -231,12 +241,36 @@ class Trainer(object):
         fake = np.vstack(fake)
         perturbated = np.vstack(perturbated)
 
+        plt.scatter(perturbated[:, 0], perturbated[:, 1], c='r', s=1)
         plt.scatter(real[:, 0], real[:, 1], c='y', s=2)
         plt.scatter(fake[:, 0], fake[:, 1], c='g', s=2)
-        plt.scatter(perturbated[:, 0], perturbated[:, 1], c='r', s=1)
 
         plt.savefig(self.ckpt_dir+str(step)+'.png')
         plt.clf()
+
+    def estimate_earth_mover_distance(self, step, n_batch=2):
+        real = list()
+        fake = list()
+
+        for i in range(n_batch):
+            __real__ = next(self.dataset_generator)
+            __fake__ = self.sess.run(self.generator.output_tensor)
+
+            real.append(__real__)
+            fake.append(__fake__)
+
+        real = np.vstack(real)
+        fake = np.vstack(fake)
+
+        cost_matrix = distance.cdist(fake, real, 'euclidean')
+
+        row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        linear_sum = cost_matrix[row_ind, col_ind].sum()
+        emd = linear_sum/real.shape[0]
+
+        emd_fetch = self.sess.run(self.emd_summary, feed_dict={self.emd_placeholder: emd})
+        self.summary_writer.add_summary(emd_fetch, step)
+        self.summary_writer.flush()
 
     def train(self):
         try:
@@ -265,6 +299,9 @@ class Trainer(object):
 
                 if step in __eval_step_list__:
                     self.draw_level_sets(step)
+
+                if FLAGS.emd_records and step % FLAGS.interval_record_earth_mover == 0 and step != 0:
+                    self.estimate_earth_mover_distance(step)
 
                 self.sess.run(self.step_inc)
 

@@ -7,9 +7,10 @@ def get_perbatuation_samples(training_samples, generated_samples, per_type,
                              dragan_parameter_C):
     x_hat = None
 
-    # Kodali, Naveen, et al. "How to Train Your DRAGAN." arXiv preprint arXiv:1705.07215 (2017).
     if per_type == 'no_purf':
         x_hat = training_samples
+
+    # Gulrajani, Ishaan, et al. "Improved training of wasserstein gans." arXiv preprint arXiv:1704.00028 (2017).
     elif per_type == 'wgan_gp':
         epsilon = tf.random_uniform(
             shape=[tf.shape(training_samples)[0], 1],
@@ -18,6 +19,7 @@ def get_perbatuation_samples(training_samples, generated_samples, per_type,
         )
         x_hat = epsilon * training_samples + (1 - epsilon) * generated_samples
 
+    # Kodali, Naveen, et al. "How to Train Your DRAGAN." arXiv preprint arXiv:1705.07215 (2017).
     elif per_type == 'dragan_only_training':
         u = tf.random_uniform(
             shape=[tf.shape(training_samples)[0], 1],
