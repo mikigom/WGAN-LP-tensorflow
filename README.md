@@ -1,1 +1,1 @@
-# wgan-lp
+# WGAN-LP-tensorflow
