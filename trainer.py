@@ -150,7 +150,8 @@ class Trainer(object):
                                  FLAGS.dataset+'_',
                                  FLAGS.Regularization_type+'_',
                                  FLAGS.Purturbation_type+'_',
-                                 str(FLAGS.Lambda),
+                                 str(FLAGS.Lambda)+'_',
+                                 str(FLAGS.emd_records),
                                  '/'])
 
         if not os.path.exists(self.ckpt_dir):
