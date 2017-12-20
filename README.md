@@ -1,5 +1,6 @@
 # WGAN-LP-tensorflow
 
+[Report on arXiv](https://arxiv.org/abs/1712.05882)
 Reproduction code for the following paper:
 
 ```
@@ -17,7 +18,7 @@ Keywords:
 Statistics - Machine Learning, Computer Science - Learning
 2017arXiv170908894P
 ```
-[On arXiv](https://arxiv.org/abs/1709.08894)
+[Original Paper on arXiv](https://arxiv.org/abs/1709.08894)
 
 ## Repository structure
 
