@@ -118,7 +118,7 @@ class Trainer(object):
         self.c_negative_loss = -self.g_loss - tf.reduce_mean(self.critic_x.output_tensor)
         if FLAGS.Regularization_type == 'no_reg_but_clipping' or \
            FLAGS.Regularization_type == 'no_reg':
-            self.c_regularization_loss = 0.
+            self.c_regularization_loss = tf.Variable(0., trainable=False)
         else:
             self.c_regularization_loss, self.x_hat = get_regularization_term(
                                                 training_samples=self.real_input,
